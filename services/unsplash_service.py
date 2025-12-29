@@ -17,8 +17,9 @@ from urllib.parse import quote_plus
 # -------------------------------------------------
 
 UNSPLASH_URL = "https://api.unsplash.com/search/photos"
-# UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
-UNSPLASH_ACCESS_KEY = "8Ktxd9rD34nThDeAzY9RjYx-G8Pa6mRlZDrMDXAWnEY"
+UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
+if not UNSPLASH_ACCESS_KEY:
+    raise ValueError("UNSPLASH_ACCESS_KEY environment variable is required. Please set it in your .env file or environment.")
 IMAGES_DIR = "images"
 FALLBACK_IMAGE = "images/fallback_video.jpg"
 
@@ -109,4 +110,14 @@ def fetch_and_save_photo(query: str) -> str:
 
     except Exception as e:
         print(f"[Unsplash] Fallback used for query '{query}': {e}")
+        # Ensure fallback image exists
+        if not os.path.exists(FALLBACK_IMAGE):
+            # Create a simple fallback image if it doesn't exist
+            try:
+                from PIL import Image
+                os.makedirs(IMAGES_DIR, exist_ok=True)
+                img = Image.new("RGB", (1280, 720), (30, 30, 40))
+                img.save(FALLBACK_IMAGE, "JPEG", quality=90)
+            except Exception:
+                pass  # If PIL fails, video_utils will handle missing image
         return FALLBACK_IMAGE

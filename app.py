@@ -14,9 +14,10 @@ from utils.pdf_extractor import extract_raw_content
 from utils.pdf_utils import generate_service_pdf
 from moviepy.config import change_settings
 
-change_settings(
-    {"IMAGEMAGICK_BINARY": r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe"}
-)
+# Configure ImageMagick path from environment variable if available
+imagemagick_path = os.getenv("IMAGEMAGICK_BINARY")
+if imagemagick_path:
+    change_settings({"IMAGEMAGICK_BINARY": imagemagick_path})
 
 logging.basicConfig(level=logging.INFO)
 
@@ -202,8 +203,19 @@ def show_create_video_page(selected_voice, uploaded_pdf):
 
                 try:
                     image = fetch_and_save_photo(slide["image_keyword"])
-                except Exception:
-                    image = os.path.join("assets", "default_background.jpg")
+                except Exception as img_error:
+                    # Fallback to default image if fetch fails
+                    fallback = os.path.join("images", "fallback_video.jpg")
+                    if not os.path.exists(fallback):
+                        # Create a simple fallback if it doesn't exist
+                        try:
+                            from PIL import Image
+                            os.makedirs("images", exist_ok=True)
+                            img = Image.new("RGB", (1280, 720), (30, 30, 40))
+                            img.save(fallback, "JPEG", quality=90)
+                        except Exception:
+                            pass
+                    image = fallback if os.path.exists(fallback) else os.path.join("assets", "default_background.jpg")
 
                 clip = create_slide(slide["title"], slide["bullets"], image, audio)
                 clip = add_avatar_to_slide(clip, audio_duration=clip.duration)

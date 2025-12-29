@@ -7,11 +7,11 @@ from moviepy.editor import (
 from moviepy.config import change_settings
 
 # -------------------------------------------------
-# ImageMagick config
+# ImageMagick config (optional - only if env var is set)
 # -------------------------------------------------
-change_settings({
-    "IMAGEMAGICK_BINARY": r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe"
-})
+imagemagick_path = os.getenv("IMAGEMAGICK_BINARY")
+if imagemagick_path:
+    change_settings({"IMAGEMAGICK_BINARY": imagemagick_path})
 
 VIDEO_W, VIDEO_H = 1280, 720
 TOP_TEXT_HEIGHT = int(VIDEO_H * 0.6)

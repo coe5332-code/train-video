@@ -122,3 +122,18 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .abstra/
+
+# Project-specific generated files
+output_videos/*.mp4
+images/*.jpg
+images/*.png
+generated_pdfs/*.pdf
+*.mp3
+*.wav
+*.tmp
+temp_*
+
+# Keep directory structure but ignore contents
+!output_videos/.gitkeep
+!images/.gitkeep
+!generated_pdfs/.gitkeep

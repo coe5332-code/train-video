@@ -1,0 +1,7 @@
+# System packages for Streamlit Cloud
+# ImageMagick is usually pre-installed, but if needed, uncomment:
+# imagemagick
+
+# FFmpeg is required for MoviePy video processing
+ffmpeg
+
