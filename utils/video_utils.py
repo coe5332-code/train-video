@@ -1,30 +1,132 @@
 from utils.avatar_utils import add_avatar_to_slide
 import os
+import tempfile
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 from moviepy.editor import (
     ImageClip, concatenate_videoclips, CompositeVideoClip,
-    AudioFileClip, concatenate_audioclips, TextClip, ColorClip, vfx
+    AudioFileClip, concatenate_audioclips, ColorClip, vfx
 )
-from moviepy.config import change_settings
-
-# -------------------------------------------------
-# ImageMagick config
-# -------------------------------------------------
-# ImageMagick is configured in app.py, but we check here too for safety
-imagemagick_path = os.getenv("IMAGEMAGICK_BINARY")
-if not imagemagick_path:
-    # Try to find ImageMagick automatically on Linux
-    import shutil
-    for possible_path in ["/usr/bin/convert", "/usr/bin/magick", "convert", "magick"]:
-        if shutil.which(possible_path):
-            imagemagick_path = shutil.which(possible_path)
-            break
-
-if imagemagick_path:
-    change_settings({"IMAGEMAGICK_BINARY": imagemagick_path})
 
 VIDEO_W, VIDEO_H = 1280, 720
 TOP_TEXT_HEIGHT = int(VIDEO_H * 0.6)
 BOTTOM_IMAGE_HEIGHT = VIDEO_H - TOP_TEXT_HEIGHT
+
+
+# -------------------------------------------------
+# TEXT RENDERING WITH PIL (NO IMAGEMAGICK NEEDED)
+# -------------------------------------------------
+def create_text_image(text, fontsize, color, max_width, font_name="Arial", bold=False):
+    """
+    Create a text image using PIL (no ImageMagick required).
+    Returns a temporary file path with the rendered text image.
+    """
+    # Try to load font, fallback to default if not available
+    try:
+        if bold:
+            # Try bold font
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "C:/Windows/Fonts/arialbd.ttf",  # Windows
+            ]
+        else:
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "C:/Windows/Fonts/arial.ttf",  # Windows
+            ]
+        
+        font = None
+        for path in font_paths:
+            if os.path.exists(path):
+                try:
+                    font = ImageFont.truetype(path, fontsize)
+                    break
+                except:
+                    continue
+        
+        if font is None:
+            font = ImageFont.load_default()
+    except:
+        font = ImageFont.load_default()
+    
+    # Parse color
+    if isinstance(color, str):
+        color_map = {
+            "white": (255, 255, 255),
+            "black": (0, 0, 0),
+            "lightgray": (211, 211, 211),
+            "gray": (128, 128, 128),
+        }
+        rgb_color = color_map.get(color.lower(), (255, 255, 255))
+    else:
+        rgb_color = color
+    
+    # Create image with transparent background
+    # Start with a reasonable size, we'll crop later
+    img = Image.new("RGBA", (max_width, fontsize * 3), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Word wrap text
+    words = text.split()
+    lines = []
+    current_line = []
+    current_width = 0
+    
+    for word in words:
+        # Estimate width (approximate)
+        word_width = len(word) * fontsize * 0.6
+        if current_width + word_width > max_width and current_line:
+            lines.append(" ".join(current_line))
+            current_line = [word]
+            current_width = word_width
+        else:
+            current_line.append(word)
+            current_width += word_width + fontsize * 0.3
+    
+    if current_line:
+        lines.append(" ".join(current_line))
+    
+    # Draw text
+    y_offset = 0
+    line_height = int(fontsize * 1.2)
+    for line in lines:
+        draw.text((0, y_offset), line, fill=rgb_color, font=font)
+        y_offset += line_height
+    
+    # Crop to actual text size
+    bbox = img.getbbox()
+    if bbox:
+        img = img.crop((0, 0, max_width, bbox[3] + 10))
+    
+    # Save to temporary file
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    img.save(temp_file.name, "PNG")
+    temp_file.close()
+    
+    return temp_file.name
+
+
+def create_text_clip(text, fontsize, color, max_width, position, start_time, duration, fadein=0, font_name="Arial", bold=False, opacity=1.0):
+    """
+    Create a MoviePy ImageClip from PIL-rendered text.
+    This replaces TextClip and doesn't require ImageMagick.
+    """
+    text_img_path = create_text_image(text, fontsize, color, max_width, font_name, bold)
+    
+    clip = ImageClip(text_img_path)
+    clip = clip.set_position(position)
+    clip = clip.set_start(start_time)
+    clip = clip.set_duration(duration)
+    clip = clip.set_opacity(opacity)
+    
+    if fadein > 0:
+        clip = clip.fadein(fadein)
+    
+    return clip
 
 
 # -------------------------------------------------
@@ -53,36 +155,30 @@ def create_slide(title, points, image_path, audio_file):
     )
 
     # -----------------------------
-    # TITLE
+    # TITLE (using PIL instead of TextClip)
     # -----------------------------
-    title_clip = (
-        TextClip(
-            title,
-            fontsize=48,
-            color="white",
-            font="Arial-Bold",
-            size=(VIDEO_W - 120, None),
-            method="caption"
-        )
-        .set_position(("center", 50))
-        .set_start(0.2)
-        .set_duration(duration)
-        .fadein(0.6)
+    title_clip = create_text_clip(
+        title,
+        fontsize=48,
+        color="white",
+        max_width=VIDEO_W - 120,
+        position=("center", 50),
+        start_time=0.2,
+        duration=duration,
+        fadein=0.6,
+        bold=True
     )
 
-    title_shadow = (
-        TextClip(
-            title,
-            fontsize=48,
-            color="black",
-            font="Arial-Bold",
-            size=(VIDEO_W - 120, None),
-            method="caption"
-        )
-        .set_position(("center", 52))
-        .set_start(0.2)
-        .set_duration(duration)
-        .set_opacity(0.6)
+    title_shadow = create_text_clip(
+        title,
+        fontsize=48,
+        color="black",
+        max_width=VIDEO_W - 120,
+        position=("center", 52),
+        start_time=0.2,
+        duration=duration,
+        opacity=0.6,
+        bold=True
     )
 
     # -----------------------------
@@ -96,34 +192,26 @@ def create_slide(title, points, image_path, audio_file):
         appear_time = 0.8 + i * 0.5
         text = f"• {point.strip()}"
 
-        bullet = (
-            TextClip(
-                text,
-                fontsize=32,
-                color="white",
-                font="Arial",
-                size=(VIDEO_W - 200, None),
-                method="caption"
-            )
-            .set_position((100, start_y + i * line_gap))
-            .set_start(appear_time)
-            .set_duration(duration - appear_time)
-            .fadein(0.4)
+        shadow = create_text_clip(
+            text,
+            fontsize=32,
+            color="black",
+            max_width=VIDEO_W - 200,
+            position=(102, start_y + i * line_gap + 2),
+            start_time=appear_time,
+            duration=duration - appear_time,
+            opacity=0.5
         )
 
-        shadow = (
-            TextClip(
-                text,
-                fontsize=32,
-                color="black",
-                font="Arial",
-                size=(VIDEO_W - 200, None),
-                method="caption"
-            )
-            .set_position((102, start_y + i * line_gap + 2))
-            .set_start(appear_time)
-            .set_duration(duration - appear_time)
-            .set_opacity(0.5)
+        bullet = create_text_clip(
+            text,
+            fontsize=32,
+            color="white",
+            max_width=VIDEO_W - 200,
+            position=(100, start_y + i * line_gap),
+            start_time=appear_time,
+            duration=duration - appear_time,
+            fadein=0.4
         )
 
         bullet_clips.extend([shadow, bullet])
@@ -150,17 +238,14 @@ def create_slide(title, points, image_path, audio_file):
     # -----------------------------
     # FOOTER
     # -----------------------------
-    footer = (
-        TextClip(
-            "Bangla Sahayta Kendra • Government of West Bengal",
-            fontsize=18,
-            color="lightgray",
-            font="Arial",
-            size=(VIDEO_W - 80, None),
-            method="caption"
-        )
-        .set_position(("center", VIDEO_H - 40))
-        .set_duration(duration)
+    footer = create_text_clip(
+        "Bangla Sahayta Kendra • Government of West Bengal",
+        fontsize=18,
+        color="lightgray",
+        max_width=VIDEO_W - 80,
+        position=("center", VIDEO_H - 40),
+        start_time=0,
+        duration=duration
     )
 
     slide = CompositeVideoClip(
