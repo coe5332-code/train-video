@@ -14,8 +14,18 @@ from utils.pdf_extractor import extract_raw_content
 from utils.pdf_utils import generate_service_pdf
 from moviepy.config import change_settings
 
-# Configure ImageMagick path from environment variable if available
+# Configure ImageMagick path
+# On Linux (Streamlit Cloud), ImageMagick is usually at /usr/bin/convert or /usr/bin/magick
+# On Windows, it needs to be specified via IMAGEMAGICK_BINARY env var
 imagemagick_path = os.getenv("IMAGEMAGICK_BINARY")
+if not imagemagick_path:
+    # Try to find ImageMagick automatically on Linux
+    import shutil
+    for possible_path in ["/usr/bin/convert", "/usr/bin/magick", "convert", "magick"]:
+        if shutil.which(possible_path):
+            imagemagick_path = shutil.which(possible_path)
+            break
+    
 if imagemagick_path:
     change_settings({"IMAGEMAGICK_BINARY": imagemagick_path})
 

@@ -7,9 +7,18 @@ from moviepy.editor import (
 from moviepy.config import change_settings
 
 # -------------------------------------------------
-# ImageMagick config (optional - only if env var is set)
+# ImageMagick config
 # -------------------------------------------------
+# ImageMagick is configured in app.py, but we check here too for safety
 imagemagick_path = os.getenv("IMAGEMAGICK_BINARY")
+if not imagemagick_path:
+    # Try to find ImageMagick automatically on Linux
+    import shutil
+    for possible_path in ["/usr/bin/convert", "/usr/bin/magick", "convert", "magick"]:
+        if shutil.which(possible_path):
+            imagemagick_path = shutil.which(possible_path)
+            break
+
 if imagemagick_path:
     change_settings({"IMAGEMAGICK_BINARY": imagemagick_path})
 
